@@ -27,7 +27,8 @@ services:
     build:
       context: ./backend
       provenance: false
-    image: ghcr.io/danielvnru/mtproto-panel-backend:latest
+    # См. IMAGE_REPO / IMAGE_TAG в .env — позволяют тянуть образы из своего форка.
+    image: ${IMAGE_REPO:-ghcr.io/danielvnru}/mtproto-panel-backend:${IMAGE_TAG:-latest}
     container_name: mtproto-panel-backend
     restart: unless-stopped
     logging:
@@ -56,7 +57,7 @@ services:
     build:
       context: ./frontend
       provenance: false
-    image: ghcr.io/danielvnru/mtproto-panel-frontend:latest
+    image: ${IMAGE_REPO:-ghcr.io/danielvnru}/mtproto-panel-frontend:${IMAGE_TAG:-latest}
     container_name: mtproto-panel-frontend
     restart: unless-stopped
     logging:
