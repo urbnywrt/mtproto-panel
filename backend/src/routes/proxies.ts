@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { pool } from '../db';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { redactProxy, validateCreateProxy, validateUpdateProxy } from '../validation';
 
 const router = Router();
 
@@ -44,7 +45,7 @@ router.get('/:nodeId/proxies', async (req: AuthRequest, res: Response) => {
       return;
     }
     const result = await proxyToNode(node, 'GET', '');
-    res.status(result.status).json(result.data);
+    res.status(result.status).json(redactProxy(result.data));
   } catch (error: any) {
     res.status(502).json({ error: `Failed to connect to node: ${error.message}` });
   }
@@ -58,8 +59,13 @@ router.post('/:nodeId/proxies', async (req: AuthRequest, res: Response) => {
       res.status(404).json({ error: 'Node not found' });
       return;
     }
-    const result = await proxyToNode(node, 'POST', '', req.body);
-    res.status(result.status).json(result.data);
+    const { error, body } = validateCreateProxy(req.body, node.ip);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+    const result = await proxyToNode(node, 'POST', '', body);
+    res.status(result.status).json(redactProxy(result.data));
   } catch (error: any) {
     res.status(502).json({ error: `Failed to connect to node: ${error.message}` });
   }
@@ -74,7 +80,7 @@ router.get('/:nodeId/proxies/:proxyId', async (req: AuthRequest, res: Response) 
       return;
     }
     const result = await proxyToNode(node, 'GET', `/${req.params.proxyId}`);
-    res.status(result.status).json(result.data);
+    res.status(result.status).json(redactProxy(result.data));
   } catch (error: any) {
     res.status(502).json({ error: `Failed to connect to node: ${error.message}` });
   }
@@ -88,8 +94,13 @@ router.put('/:nodeId/proxies/:proxyId', async (req: AuthRequest, res: Response) 
       res.status(404).json({ error: 'Node not found' });
       return;
     }
-    const result = await proxyToNode(node, 'PUT', `/${req.params.proxyId}`, req.body);
-    res.status(result.status).json(result.data);
+    const { error, body } = validateUpdateProxy(req.body);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+    const result = await proxyToNode(node, 'PUT', `/${req.params.proxyId}`, body);
+    res.status(result.status).json(redactProxy(result.data));
   } catch (error: any) {
     res.status(502).json({ error: `Failed to connect to node: ${error.message}` });
   }
@@ -166,6 +177,21 @@ router.post('/:nodeId/proxies/:proxyId/unpause', async (req: AuthRequest, res: R
     }
     const result = await proxyToNode(node, 'POST', `/${req.params.proxyId}/unpause`);
     res.status(result.status).json(result.data);
+  } catch (error: any) {
+    res.status(502).json({ error: `Failed to connect to node: ${error.message}` });
+  }
+});
+
+// Re-issue the certificate for a WEB proxy
+router.post('/:nodeId/proxies/:proxyId/renew-cert', async (req: AuthRequest, res: Response) => {
+  try {
+    const node = await getNodeWithToken(req.params.nodeId);
+    if (!node) {
+      res.status(404).json({ error: 'Node not found' });
+      return;
+    }
+    const result = await proxyToNode(node, 'POST', `/${req.params.proxyId}/renew-cert`);
+    res.status(result.status).json(redactProxy(result.data));
   } catch (error: any) {
     res.status(502).json({ error: `Failed to connect to node: ${error.message}` });
   }

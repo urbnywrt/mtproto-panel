@@ -169,6 +169,42 @@ router.post('/:id/update', async (req: AuthRequest, res: Response) => {
 });
 
 // Get node domains
+// Node capabilities — whether it can host WEB proxies, and under which 443 scheme.
+// The form uses this to avoid offering WEB where it cannot possibly work.
+router.get('/:id/capabilities', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query('SELECT ip, port, token FROM nodes WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Node not found' });
+      return;
+    }
+    const node = result.rows[0];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const resp = await fetch(`http://${node.ip}:${node.port}/api/capabilities`, {
+        headers: { Authorization: `Bearer ${node.token}` },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (resp.status === 404) {
+        // Node predates WEB support.
+        res.json({ web: false, mode: null, bindIp: null, acmeTokenConfigured: false, telemtVersion: null, reason: 'Нода не обновлена до версии с поддержкой WEB' });
+        return;
+      }
+      const data = await resp.json() as Record<string, unknown>;
+      // In mode 1 the node cannot know its own public address; fill in what we have.
+      if (data && data.bindIp === null) data.bindIp = node.ip;
+      res.status(resp.status).json(data);
+    } catch (err: any) {
+      clearTimeout(timeout);
+      res.status(502).json({ error: `Failed to connect to node: ${err.message}` });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/:id/domains', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query('SELECT ip, port, token FROM nodes WHERE id = $1', [req.params.id]);
