@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Label, DropdownMenu } from '@gravity-ui/uikit';
-import { pauseProxy, unpauseProxy, ProxyData } from '../api';
+import { pauseProxy, unpauseProxy, renewProxyCertificate, ProxyData } from '../api';
+import { certBadge, isWebProxy } from '../utils/proxyType';
 import { formatBytes } from '../utils/format';
 import s from './ProxyCard.module.scss';
 
@@ -19,6 +20,9 @@ interface Props {
 export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onDelete, onCopyLink, onStatusChange }: Props) {
   const navigate = useNavigate();
   const [togglingPause, setTogglingPause] = useState(false);
+  const [renewing, setRenewing] = useState(false);
+  const isWeb = isWebProxy(proxy);
+  const cert = certBadge(proxy);
 
   const statusTheme = proxy.status === 'running' ? 'success' : proxy.status === 'stopped' || proxy.status === 'paused' ? 'warning' : 'danger';
   const statusLabel = proxy.status === 'running' ? 'работает' : proxy.status === 'paused' ? 'пауза' : proxy.status === 'stopped' ? 'остановлен' : 'ошибка';
@@ -39,6 +43,18 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
     }
   };
 
+  const handleRenewCert = async () => {
+    setRenewing(true);
+    try {
+      await renewProxyCertificate(nodeId, proxy.id);
+      onStatusChange?.();
+    } catch (err) {
+      console.error('Failed to renew certificate:', err);
+    } finally {
+      setRenewing(false);
+    }
+  };
+
   const handleCardClick = () => {
     navigate(`/nodes/${nodeId}/proxy/${proxy.id}`);
   };
@@ -56,6 +72,9 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
           action: () => handleTogglePause(),
         }]
       : []),
+    ...(isWeb
+      ? [{ text: renewing ? 'Выпускается…' : 'Перевыпустить сертификат', action: () => handleRenewCert() }]
+      : []),
     { text: 'Удалить', action: () => onDelete(), theme: 'danger' as const },
   ];
 
@@ -63,6 +82,9 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
     <Card type="action" view="outlined" className={s.card} onClick={handleCardClick}>
       <div className={s.header}>
         <span className={s.name}>{proxy.name || `Proxy ${proxy.id}`}</span>
+        <Label theme={isWeb ? 'info' : 'unknown'} size="s">
+          {isWeb ? 'WEB' : 'Fake TLS'}
+        </Label>
         <Label theme={statusTheme} size="s">
           {statusLabel}
         </Label>
@@ -80,12 +102,20 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
       )}
       <div className={s.field}>
         <span className={s.label}>Порт</span>
-        <span>{proxy.listenPort || proxy.nginxPort || proxy.port}</span>
+        <span>{isWeb ? 443 : proxy.listenPort || proxy.nginxPort || proxy.port}</span>
       </div>
       <div className={s.field}>
         <span className={s.label}>Домен</span>
         <span>{proxy.domain}</span>
       </div>
+      {isWeb && (
+        <div className={s.field}>
+          <span className={s.label}>Сертификат</span>
+          <span title={proxy.certLastError || undefined}>
+            <Label theme={cert.theme} size="s">{cert.text}</Label>
+          </span>
+        </div>
+      )}
       <div className={s.field}>
         <span className={s.label}>Трафик ↑</span>
         <span>{formatBytes(proxy.trafficUp || 0)}</span>

@@ -1,6 +1,6 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { Dialog, TextInput, Alert, Select, RadioButton, HelpMark, Tabs } from '@gravity-ui/uikit';
-import { createProxy, NodeData } from '../api';
+import { createProxy, getNodeCapabilities, NodeData, NodeCapabilities, ProxyType, WebCarrier, WebSecretMode } from '../api';
 import { DEFAULT_ADVANCED, AdvancedOptions, TelemtFields } from './TelemtFields';
 
 interface Props {
@@ -13,6 +13,12 @@ interface Props {
 
 export default function AddProxyDialog({ open, onClose, nodeId, nodes, onCreated }: Props) {
   const [activeTab, setActiveTab] = useState('basic');
+  const [type, setType] = useState<ProxyType>('faketls');
+  const [acmeEmail, setAcmeEmail] = useState('');
+  const [acmeDnsToken, setAcmeDnsToken] = useState('');
+  const [webCarrier, setWebCarrier] = useState<WebCarrier>('https-lanes');
+  const [webSecretMode, setWebSecretMode] = useState<WebSecretMode>('plain');
+  const [capabilities, setCapabilities] = useState<NodeCapabilities | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string>(nodeId ? nodeId.toString() : '');
   const [domain, setDomain] = useState('');
   const [name, setName] = useState('');
@@ -29,6 +35,31 @@ export default function AddProxyDialog({ open, onClose, nodeId, nodes, onCreated
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const targetNode = nodeId || (selectedNodeId ? parseInt(selectedNodeId, 10) : 0);
+
+  useEffect(() => {
+    if (!open || !targetNode) {
+      setCapabilities(null);
+      return;
+    }
+    let cancelled = false;
+    getNodeCapabilities(targetNode)
+      .then((caps) => {
+        if (cancelled) return;
+        setCapabilities(caps);
+        // Do not leave the form on an option this node cannot fulfil.
+        if (!caps.web) setType('faketls');
+      })
+      .catch(() => {
+        if (!cancelled) setCapabilities(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, targetNode]);
+
+  const isWeb = type === 'web';
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
@@ -44,16 +75,21 @@ export default function AddProxyDialog({ open, onClose, nodeId, nodes, onCreated
     try {
       const { stunServers: stunStr, censorshipTlsDomain: censD, censorshipTlsFrontDir: censFD, ...restOpts } = advancedOptions;
       await createProxy(targetNodeId, {
+        type,
         domain: domain || undefined,
+        acmeEmail: isWeb ? acmeEmail : undefined,
+        acmeDnsToken: isWeb && acmeDnsToken ? acmeDnsToken : undefined,
+        webCarrier: isWeb ? webCarrier : undefined,
+        webSecretMode: isWeb ? webSecretMode : undefined,
         tag: tag || undefined,
         name: name || undefined,
         note: note || undefined,
         maxConnections: maxConnections ? parseInt(maxConnections, 10) : undefined,
-        listenPort: listenPort ? parseInt(listenPort, 10) : undefined,
+        listenPort: !isWeb && listenPort ? parseInt(listenPort, 10) : undefined,
         vpnSubscription: outboundMode === 'vpn' ? (vpnSubscription || undefined) : undefined,
         natIp: outboundMode === 'tunnel' ? (natIp || undefined) : undefined,
         tunnelInterface: outboundMode === 'tunnel' ? (tunnelInterface || undefined) : undefined,
-        maskHost: maskHost || undefined,
+        maskHost: !isWeb && maskHost ? maskHost : undefined,
         ...restOpts,
         stunServers: stunStr.split(',').map((s) => s.trim()).filter(Boolean),
         censorshipTlsDomain: censD || undefined,
@@ -66,6 +102,8 @@ export default function AddProxyDialog({ open, onClose, nodeId, nodes, onCreated
       setMaxConnections('');
       setListenPort('');
       setVpnSubscription('');
+      setAcmeEmail('');
+      setAcmeDnsToken('');
       setNatIp('');
       setTunnelInterface('');
       setMaskHost('');
@@ -117,6 +155,83 @@ export default function AddProxyDialog({ open, onClose, nodeId, nodes, onCreated
                 </div>
               )}
               <div className="dialog-field">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <label style={{ margin: 0 }}>Тип прокси</label>
+                  <HelpMark>Fake TLS — обычный MTProxy, маскируется под TLS к чужому домену, работает во всех клиентах. WEB — новый тип из Telegram Desktop: свой домен, настоящий сертификат и настоящий сайт на нём, трафик идёт обычным HTTPS.</HelpMark>
+                </div>
+                <RadioButton
+                  value={type}
+                  onUpdate={(v) => setType(v as ProxyType)}
+                  size="m"
+                  options={[
+                    { value: 'faketls', content: 'Fake TLS' },
+                    { value: 'web', content: 'WEB', disabled: capabilities ? !capabilities.web : true },
+                  ]}
+                />
+                {capabilities && !capabilities.web && (
+                  <div style={{ marginTop: 8 }}>
+                    <Alert theme="info" message={capabilities.reason || 'Эта нода не может держать WEB-прокси'} />
+                  </div>
+                )}
+              </div>
+              {isWeb && (
+                <>
+                  <div className="dialog-field">
+                    <label>Домен *</label>
+                    <TextInput value={domain} onUpdate={setDomain} placeholder="напр. proxy.example.com" size="l" />
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <Alert
+                      theme="warning"
+                      message={`A-запись домена должна указывать на ${capabilities?.bindIp || 'IP ноды'} и быть DNS only (серое облако). Оранжевое облако Cloudflare терминирует TLS у себя и полностью ломает WEB-прокси.`}
+                    />
+                  </div>
+                  <div className="dialog-field">
+                    <label>Email для ACME *</label>
+                    <TextInput value={acmeEmail} onUpdate={setAcmeEmail} placeholder="ops@example.com" size="l" />
+                  </div>
+                  {capabilities && !capabilities.acmeTokenConfigured && (
+                    <div className="dialog-field">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                        <label style={{ margin: 0 }}>Cloudflare API token *</label>
+                        <HelpMark>На ноде не задан CF_API_TOKEN. Нужен токен со scope Zone:DNS:Edit — сертификат выпускается через DNS-01.</HelpMark>
+                      </div>
+                      <TextInput value={acmeDnsToken} onUpdate={setAcmeDnsToken} type="password" size="l" />
+                    </div>
+                  )}
+                  <div className="dialog-field">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <label style={{ margin: 0 }}>Carrier</label>
+                      <HelpMark>https-lanes даёт каждому логическому потоку свою очередь и снимает взаимные блокировки. https — исходный последовательный режим. WebSocket-режимы telemt пока не поддерживает.</HelpMark>
+                    </div>
+                    <Select
+                      value={[webCarrier]}
+                      onUpdate={(v) => setWebCarrier(v[0] as WebCarrier)}
+                      width="max"
+                      options={[
+                        { value: 'https-lanes', content: 'https-lanes (рекомендуется)' },
+                        { value: 'https', content: 'https' },
+                      ]}
+                    />
+                  </div>
+                  <div className="dialog-field">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <label style={{ margin: 0 }}>Режим секрета</label>
+                      <HelpMark>plain — 32 hex в ссылке. dd — добавляет случайный паддинг. Режим ee (fake TLS) в WEB не поддерживается.</HelpMark>
+                    </div>
+                    <Select
+                      value={[webSecretMode]}
+                      onUpdate={(v) => setWebSecretMode(v[0] as WebSecretMode)}
+                      width="max"
+                      options={[
+                        { value: 'plain', content: 'plain' },
+                        { value: 'dd', content: 'dd' },
+                      ]}
+                    />
+                  </div>
+                </>
+              )}
+              <div className="dialog-field">
                 <label>Название (опционально)</label>
                 <TextInput value={name} onUpdate={setName} placeholder="Имя прокси" size="l" />
               </div>
@@ -124,10 +239,12 @@ export default function AddProxyDialog({ open, onClose, nodeId, nodes, onCreated
                 <label>Заметка (опционально)</label>
                 <TextInput value={note} onUpdate={setNote} placeholder="Описание" size="l" />
               </div>
-              <div className="dialog-field">
-                <label>Fake TLS домен (опционально)</label>
-                <TextInput value={domain} onUpdate={setDomain} placeholder="напр. www.google.com" size="l" />
-              </div>
+              {!isWeb && (
+                <div className="dialog-field">
+                  <label>Fake TLS домен (опционально)</label>
+                  <TextInput value={domain} onUpdate={setDomain} placeholder="напр. www.google.com" size="l" />
+                </div>
+              )}
               <div className="dialog-field">
                 <label>Промо тег (опционально)</label>
                 <TextInput value={tag} onUpdate={setTag} placeholder="Промо тег" size="l" />
@@ -136,10 +253,12 @@ export default function AddProxyDialog({ open, onClose, nodeId, nodes, onCreated
                 <label>Максимум подключений (0 = без лимита)</label>
                 <TextInput value={maxConnections} onUpdate={setMaxConnections} placeholder="0" size="l" type="number" />
               </div>
-              <div className="dialog-field">
-                <label>Порт прослушивания (пусто = SNI на 443)</label>
-                <TextInput value={listenPort} onUpdate={setListenPort} placeholder="напр. 8443" size="l" type="number" />
-              </div>
+              {!isWeb && (
+                <div className="dialog-field">
+                  <label>Порт прослушивания (пусто = SNI на 443)</label>
+                  <TextInput value={listenPort} onUpdate={setListenPort} placeholder="напр. 8443" size="l" type="number" />
+                </div>
+              )}
               <div className="dialog-field">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                   <label style={{ margin: 0 }}>Исходящий трафик</label>
@@ -173,10 +292,12 @@ export default function AddProxyDialog({ open, onClose, nodeId, nodes, onCreated
                   </div>
                 </>
               )}
-              <div className="dialog-field">
-                <label>Self-steal — куда перенаправлять не-MTProto трафик (опционально)</label>
-                <TextInput value={maskHost} onUpdate={setMaskHost} placeholder="напр. 127.0.0.1:8080" size="l" />
-              </div>
+              {!isWeb && (
+                <div className="dialog-field">
+                  <label>Self-steal — куда перенаправлять не-MTProto трафик (опционально)</label>
+                  <TextInput value={maskHost} onUpdate={setMaskHost} placeholder="напр. 127.0.0.1:8080" size="l" />
+                </div>
+              )}
             </>
           )}
 

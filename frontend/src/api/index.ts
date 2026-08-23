@@ -154,7 +154,34 @@ export interface ConnectedIpInfo {
   countryCode?: string;
 }
 
-export interface ProxyData {
+export type ProxyType = 'faketls' | 'web';
+export type WebCarrier = 'https' | 'https-lanes';
+export type WebSecretMode = 'plain' | 'dd';
+export type CertStatus = 'pending' | 'active' | 'error';
+
+export interface NodeCapabilities {
+  web: boolean;
+  mode: 1 | 2 | null;
+  bindIp: string | null;
+  acmeTokenConfigured: boolean;
+  telemtVersion: string | null;
+  reason: string;
+}
+
+/** Fields that only apply when type === 'web'. */
+export interface WebProxyFields {
+  acmeEmail?: string;
+  acmeDnsToken?: string;
+  webCarrier?: WebCarrier;
+  webSecretMode?: WebSecretMode;
+}
+
+export interface ProxyData extends WebProxyFields {
+  /** Absent on proxies created before WEB support — treat as 'faketls'. */
+  type?: ProxyType;
+  certStatus?: CertStatus;
+  certExpiresAt?: string;
+  certLastError?: string;
   id: string;
   name: string;
   note: string;
@@ -227,7 +254,8 @@ export interface ProxyStatsData {
   connectedIps: ConnectedIpInfo[];
 }
 
-export interface CreateProxyRequest {
+export interface CreateProxyRequest extends WebProxyFields {
+  type?: ProxyType;
   secret?: string;
   domain?: string;
   tag?: string;
@@ -275,7 +303,7 @@ export interface CreateProxyRequest {
   meInitRetryAttempts?: number;
 }
 
-export interface UpdateProxyRequest {
+export interface UpdateProxyRequest extends WebProxyFields {
   domain?: string;
   tag?: string;
   name?: string;
@@ -339,12 +367,24 @@ export interface IpHistoryEntryData {
   lastSeen: string;
 }
 
+export async function getNodeCapabilities(nodeId: number): Promise<NodeCapabilities> {
+  return request<NodeCapabilities>(`/nodes/${nodeId}/capabilities`);
+}
+
+export async function renewProxyCertificate(nodeId: number, proxyId: string): Promise<ProxyData> {
+  return request<ProxyData>(`/nodes/${nodeId}/proxies/${proxyId}/renew-cert`, { method: 'POST' });
+}
+
 export async function getProxies(nodeId: number): Promise<ProxyData[]> {
   return request<ProxyData[]>(`/nodes/${nodeId}/proxies`);
 }
 
 export async function getAllProxies(): Promise<{ nodeId: number; nodeName: string; nodeIp: string; proxies: ProxyData[] }[]> {
   return request<{ nodeId: number; nodeName: string; nodeIp: string; proxies: ProxyData[] }[]>('/proxies/all');
+}
+
+export async function getProxy(nodeId: number, proxyId: string): Promise<ProxyData> {
+  return request<ProxyData>(`/nodes/${nodeId}/proxies/${proxyId}`);
 }
 
 export async function createProxy(nodeId: number, data: CreateProxyRequest) {

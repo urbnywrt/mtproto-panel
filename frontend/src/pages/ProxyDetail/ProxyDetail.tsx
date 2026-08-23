@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Loader, Label, Alert, Tooltip } from '@gravity-ui/uikit';
+import { certBadge, isWebProxy } from '../../utils/proxyType';
 import { Line } from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import 'chartjs-adapter-date-fns';
@@ -27,7 +28,7 @@ export default function ProxyDetail() {
   const {
     nodeId, node, stats, statsHistory, ipHistory, blacklist,
     loading, error, setError, copied, togglingPause, clearing, nodeGeo, chartRef,
-    connectedIpSet, statusTheme, statusLabel,
+    proxy, connectedIpSet, statusTheme, statusLabel,
     handleCopyLink, handleTogglePause, handleClearHistory,
   } = useProxyDetail();
 
@@ -42,6 +43,11 @@ export default function ProxyDetail() {
         {stats && (
           <>
             <h2 style={{ margin: 0 }}>{stats.id}</h2>
+            {proxy && (
+              <Label theme={isWebProxy(proxy) ? 'info' : 'unknown'} size="s">
+                {isWebProxy(proxy) ? 'WEB' : 'Fake TLS'}
+              </Label>
+            )}
             <Label theme={statusTheme} size="s">{statusLabel}</Label>
           </>
         )}
@@ -51,6 +57,40 @@ export default function ProxyDetail() {
           </Label>
         )}
       </div>
+
+      {proxy && isWebProxy(proxy) && (
+        <Card view="outlined" className={s.statsCard}>
+          <div className={s.statsGrid}>
+            <div className={s.statItem}>
+              <div className={s.statValue}>{proxy.domain}</div>
+              <div className={s.statLabel}>Домен</div>
+            </div>
+            <div className={s.statItem}>
+              <div className={s.statValue}>443</div>
+              <div className={s.statLabel}>Порт</div>
+            </div>
+            <div className={s.statItem}>
+              <div className={s.statValue}>{proxy.webCarrier || 'https-lanes'}</div>
+              <div className={s.statLabel}>Carrier</div>
+            </div>
+            <div className={s.statItem}>
+              <div className={s.statValue}>{proxy.webSecretMode || 'plain'}</div>
+              <div className={s.statLabel}>Режим секрета</div>
+            </div>
+            <div className={s.statItem}>
+              <div className={s.statValue}>
+                <Label theme={certBadge(proxy).theme} size="s">{certBadge(proxy).text}</Label>
+              </div>
+              <div className={s.statLabel}>Сертификат</div>
+            </div>
+          </div>
+          {proxy.certLastError && (
+            <div style={{ marginTop: 12 }}>
+              <Alert theme="warning" message={`Последняя ошибка выпуска: ${proxy.certLastError}`} />
+            </div>
+          )}
+        </Card>
+      )}
 
       {error && (
         <div className={s.errorWrap}>

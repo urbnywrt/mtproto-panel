@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { copyToClipboard } from '../utils/clipboard';
 import {
   getNode,
+  getProxy,
   getProxyStats,
   getProxyLink,
   getProxyStatsHistory,
@@ -12,6 +13,7 @@ import {
   pauseProxy,
   unpauseProxy,
   NodeData,
+  ProxyData,
   ProxyStatsData,
   ConnectedIpInfo,
   StatsSnapshotData,
@@ -24,6 +26,7 @@ export function useProxyDetail() {
 
   const [node, setNode] = useState<NodeData | null>(null);
   const [stats, setStats] = useState<ProxyStatsData | null>(null);
+  const [proxy, setProxy] = useState<ProxyData | null>(null);
   const [statsHistory, setStatsHistory] = useState<StatsSnapshotData[]>([]);
   const [ipHistory, setIpHistory] = useState<IpHistoryEntryData[]>([]);
   const [blacklist, setBlacklist] = useState<Set<string>>(new Set());
@@ -46,15 +49,17 @@ export function useProxyDetail() {
   const loadAll = useCallback(async () => {
     if (!proxyId) return;
     try {
-      const [nodeData, statsData, history, ips, bl] = await Promise.all([
+      const [nodeData, statsData, proxyData, history, ips, bl] = await Promise.all([
         getNode(nodeId),
         getProxyStats(nodeId, proxyId),
+        getProxy(nodeId, proxyId),
         getProxyStatsHistory(nodeId, proxyId),
         getProxyIpHistory(nodeId, proxyId),
         getNodeBlacklist(nodeId),
       ]);
       setNode(nodeData);
       setStats(statsData);
+      setProxy(proxyData);
       setStatsHistory(history);
       setIpHistory(ips);
       setBlacklist(new Set(bl));
@@ -153,7 +158,7 @@ export function useProxyDetail() {
   });
 
   return {
-    nodeId, node, stats, statsHistory, ipHistory: sortedIpHistory, blacklist,
+    nodeId, node, stats, proxy, statsHistory, ipHistory: sortedIpHistory, blacklist,
     loading, error, setError, copied, togglingPause, clearing, nodeGeo, chartRef,
     connectedIpSet, statusTheme, statusLabel,
     handleCopyLink, handleTogglePause, handleClearHistory,

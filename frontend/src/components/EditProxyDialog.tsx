@@ -1,6 +1,7 @@
 import { useState, FormEvent, useEffect } from 'react';
-import { Dialog, TextInput, Alert, Button, RadioButton, HelpMark, Tabs } from '@gravity-ui/uikit';
-import { updateProxy, ProxyData } from '../api';
+import { Dialog, TextInput, Alert, Button, Label, RadioButton, HelpMark, Tabs } from '@gravity-ui/uikit';
+import { updateProxy, ProxyData, WebCarrier, WebSecretMode } from '../api';
+import { certBadge, isWebProxy } from '../utils/proxyType';
 import { copyToClipboard } from '../utils/clipboard';
 import { DEFAULT_ADVANCED, AdvancedOptions, TelemtFields } from './TelemtFields';
 
@@ -68,6 +69,10 @@ export default function EditProxyDialog({ open, onClose, nodeId, proxy, onUpdate
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [secretCopied, setSecretCopied] = useState(false);
+  const [acmeEmail, setAcmeEmail] = useState(proxy.acmeEmail || '');
+  const [webCarrier, setWebCarrier] = useState<WebCarrier>(proxy.webCarrier || 'https-lanes');
+  const [webSecretMode, setWebSecretMode] = useState<WebSecretMode>(proxy.webSecretMode || 'plain');
+  const isWeb = isWebProxy(proxy);
 
   useEffect(() => {
     setName(proxy.name || '');
@@ -98,12 +103,15 @@ export default function EditProxyDialog({ open, onClose, nodeId, proxy, onUpdate
     try {
       const { stunServers: stunStr, censorshipTlsDomain: censD, censorshipTlsFrontDir: censFD, ...restOpts } = advancedOptions;
       await updateProxy(nodeId, proxy.id, {
+        acmeEmail: isWeb && acmeEmail !== (proxy.acmeEmail || '') ? acmeEmail : undefined,
+        webCarrier: isWeb && webCarrier !== (proxy.webCarrier || 'https-lanes') ? webCarrier : undefined,
+        webSecretMode: isWeb && webSecretMode !== (proxy.webSecretMode || 'plain') ? webSecretMode : undefined,
         name: name !== (proxy.name || '') ? name : undefined,
         note: note !== (proxy.note || '') ? note : undefined,
         domain: domain !== proxy.domain ? domain : undefined,
         tag: tag !== (proxy.tag || '') ? tag : undefined,
         maxConnections: parseInt(maxConnections, 10) || 0,
-        listenPort: listenPort ? parseInt(listenPort, 10) : undefined,
+        listenPort: !isWeb && listenPort ? parseInt(listenPort, 10) : undefined,
         vpnSubscription: outboundMode === 'vpn'
           ? (vpnSubscription !== (proxy.vpnSubscription || '') ? vpnSubscription : undefined)
           : '',
@@ -152,6 +160,51 @@ export default function EditProxyDialog({ open, onClose, nodeId, proxy, onUpdate
             {activeTab === 'basic' && (
             <>
               <div className="dialog-field">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label style={{ margin: 0 }}>Тип</label>
+                  <Label theme={isWeb ? 'info' : 'unknown'} size="s">{isWeb ? 'WEB' : 'Fake TLS'}</Label>
+                  {isWeb && <Label theme={certBadge(proxy).theme} size="s">сертификат: {certBadge(proxy).text}</Label>}
+                  <HelpMark>Тип менять нельзя: это другой домен, другой конфиг и другой сертификат. Нужен другой тип — создайте новый прокси.</HelpMark>
+                </div>
+                {isWeb && proxy.certLastError && (
+                  <div style={{ marginTop: 8 }}>
+                    <Alert theme="warning" message={`Последняя ошибка выпуска: ${proxy.certLastError}`} />
+                  </div>
+                )}
+              </div>
+              {isWeb && (
+                <>
+                  <div className="dialog-field">
+                    <label>Email для ACME</label>
+                    <TextInput value={acmeEmail} onUpdate={setAcmeEmail} placeholder="ops@example.com" size="l" />
+                  </div>
+                  <div className="dialog-field">
+                    <label>Carrier</label>
+                    <RadioButton
+                      value={webCarrier}
+                      onUpdate={(v) => setWebCarrier(v as WebCarrier)}
+                      size="m"
+                      options={[
+                        { value: 'https-lanes', content: 'https-lanes' },
+                        { value: 'https', content: 'https' },
+                      ]}
+                    />
+                  </div>
+                  <div className="dialog-field">
+                    <label>Режим секрета</label>
+                    <RadioButton
+                      value={webSecretMode}
+                      onUpdate={(v) => setWebSecretMode(v as WebSecretMode)}
+                      size="m"
+                      options={[
+                        { value: 'plain', content: 'plain' },
+                        { value: 'dd', content: 'dd' },
+                      ]}
+                    />
+                  </div>
+                </>
+              )}
+              <div className="dialog-field">
                 <label>Название</label>
                 <TextInput value={name} onUpdate={setName} placeholder="Название прокси" size="l" />
               </div>
@@ -169,8 +222,13 @@ export default function EditProxyDialog({ open, onClose, nodeId, proxy, onUpdate
                 </div>
               </div>
               <div className="dialog-field">
-                <label>Fake TLS домен</label>
+                <label>{isWeb ? 'Домен' : 'Fake TLS домен'}</label>
                 <TextInput value={domain} onUpdate={setDomain} size="l" />
+                {isWeb && domain !== proxy.domain && (
+                  <div style={{ marginTop: 8 }}>
+                    <Alert theme="warning" message="Смена домена потребует выпуска нового сертификата и новой A-записи." />
+                  </div>
+                )}
               </div>
               <div className="dialog-field">
                 <label>Промо тег</label>
@@ -217,10 +275,12 @@ export default function EditProxyDialog({ open, onClose, nodeId, proxy, onUpdate
                   </div>
                 </>
               )}
-              <div className="dialog-field">
-                <label>Self-steal - куда перенаправлять не-MTProto трафик (пусто = отключить)</label>
-                <TextInput value={maskHost} onUpdate={setMaskHost} placeholder="напр. 127.0.0.1:8080" size="l" />
-              </div>
+              {!isWeb && (
+                <div className="dialog-field">
+                  <label>Self-steal - куда перенаправлять не-MTProto трафик (пусто = отключить)</label>
+                  <TextInput value={maskHost} onUpdate={setMaskHost} placeholder="напр. 127.0.0.1:8080" size="l" />
+                </div>
+              )}
             </>
           )}
 
