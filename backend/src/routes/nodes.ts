@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { pool } from '../db';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { isValidWebDomain } from '../validation';
 
 const router = Router();
 
@@ -78,10 +79,34 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 router.put('/:id', async (req: AuthRequest, res: Response) => {
   const { name, ip, port, token, domain } = req.body;
 
+  // This route is reachable from the UI now, so bad input should come back as a clear
+  // 400 rather than a Postgres type error surfaced as a 500.
+  if (ip !== undefined && (typeof ip !== 'string' || !/^[a-z0-9.:-]+$/i.test(ip.trim()) || !ip.trim())) {
+    res.status(400).json({ error: 'IP должен быть адресом или именем хоста, без схемы и пробелов' });
+    return;
+  }
+  if (port !== undefined) {
+    const parsed = Number(port);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+      res.status(400).json({ error: 'Порт должен быть числом от 1 до 65535' });
+      return;
+    }
+  }
+  // An empty string is how "no domain" is stored, so it is allowed and clears the field.
+  if (domain !== undefined && domain !== '' && (typeof domain !== 'string' || !isValidWebDomain(domain.trim().toLowerCase()))) {
+    res.status(400).json({ error: `Некорректный домен "${String(domain)}"` });
+    return;
+  }
+
+  // Store normalised values: the domain is validated lowercased, so it must be stored
+  // that way too, or the record disagrees with what was checked.
+  const nextIp = typeof ip === 'string' ? ip.trim() : ip;
+  const nextDomain = typeof domain === 'string' ? domain.trim().toLowerCase() : domain;
+
   try {
     const result = await pool.query(
       'UPDATE nodes SET name = COALESCE($1, name), ip = COALESCE($2, ip), port = COALESCE($3, port), token = COALESCE($4, token), domain = COALESCE($5, domain) WHERE id = $6 RETURNING id, name, ip, port, domain, created_at',
-      [name, ip, port, token, domain, req.params.id]
+      [name, nextIp, port, token, nextDomain, req.params.id]
     );
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'Node not found' });

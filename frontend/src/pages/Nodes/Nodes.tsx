@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Label, Loader } from '@gravity-ui/uikit';
 import AddNodeDialog from '../../components/AddNodeDialog';
+import EditNodeDialog from '../../components/EditNodeDialog';
 import FlagIcon from '../../components/FlagIcon';
 import { useNodes } from '../../hooks/useNodes';
+import type { NodeData } from '../../api';
 import s from './Nodes.module.scss';
 
 export default function Nodes() {
@@ -12,6 +15,8 @@ export default function Nodes() {
     healthMap, updatingMap, proxiesMap, geoMap, versionMap,
     loadNodes, handleDelete, handleUpdate,
   } = useNodes();
+
+  const [editing, setEditing] = useState<NodeData | null>(null);
 
   const healthDotClass = (id: number) =>
     healthMap[id] === null ? s.healthDotChecking : healthMap[id] ? s.healthDotOnline : s.healthDotOffline;
@@ -81,6 +86,13 @@ export default function Nodes() {
               )}
 
               <div className={s.cardActions}>
+                <Button
+                  view="outlined"
+                  size="s"
+                  onClick={(e) => { e.stopPropagation(); setEditing(node); }}
+                >
+                  Изменить
+                </Button>
                 <Button view="outlined" size="s" loading={updatingMap[node.id] || false} onClick={(e) => handleUpdate(node.id, e)}>
                   Обновить
                 </Button>
@@ -92,6 +104,13 @@ export default function Nodes() {
           ))}
         </div>
       )}
+
+      <EditNodeDialog
+        open={editing !== null}
+        node={editing}
+        onClose={() => setEditing(null)}
+        onUpdated={() => { setEditing(null); loadNodes(); }}
+      />
 
       <AddNodeDialog
         open={showAdd}
