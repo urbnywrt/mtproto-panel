@@ -422,6 +422,14 @@ export async function unpauseProxy(nodeId: number, proxyId: string): Promise<Pro
   return request<ProxyData>(`/nodes/${nodeId}/proxies/${proxyId}/unpause`, { method: 'POST' });
 }
 
+/**
+ * Rebuilds the proxy's container from its stored settings. Unlike unpause this recreates
+ * the container, which is how a node upgrade reaches an existing proxy.
+ */
+export async function restartProxy(nodeId: number, proxyId: string): Promise<ProxyData> {
+  return request<ProxyData>(`/nodes/${nodeId}/proxies/${proxyId}/restart`, { method: 'POST' });
+}
+
 // Node domains
 export async function getNodeDomains(nodeId: number): Promise<string[]> {
   const data = await request<{ domains: string[] }>(`/nodes/${nodeId}/domains`);

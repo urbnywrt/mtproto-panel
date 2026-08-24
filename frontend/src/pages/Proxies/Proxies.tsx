@@ -52,6 +52,7 @@ export default function Proxies() {
               onDelete={() => handleDelete(proxy.nodeId, proxy.id)}
               onCopyLink={() => handleCopyLink(proxy.nodeId, proxy.id)}
               onStatusChange={loadData}
+              onError={setError}
             />
           ))}
         </div>

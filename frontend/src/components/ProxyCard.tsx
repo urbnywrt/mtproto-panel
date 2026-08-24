@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Label, DropdownMenu } from '@gravity-ui/uikit';
-import { pauseProxy, unpauseProxy, renewProxyCertificate, ProxyData } from '../api';
+import { pauseProxy, unpauseProxy, restartProxy, renewProxyCertificate, ProxyData } from '../api';
 import { certBadge, isWebProxy } from '../utils/proxyType';
 import { formatBytes } from '../utils/format';
 import s from './ProxyCard.module.scss';
@@ -15,12 +15,15 @@ interface Props {
   onDelete: () => void;
   onCopyLink: () => void;
   onStatusChange?: () => void;
+  /** Surfaces action failures in the parent page's alert. */
+  onError?: (message: string) => void;
 }
 
-export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onDelete, onCopyLink, onStatusChange }: Props) {
+export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onDelete, onCopyLink, onStatusChange, onError }: Props) {
   const navigate = useNavigate();
   const [togglingPause, setTogglingPause] = useState(false);
   const [renewing, setRenewing] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const isWeb = isWebProxy(proxy);
   const cert = certBadge(proxy);
 
@@ -36,8 +39,8 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
         await pauseProxy(nodeId, proxy.id);
       }
       onStatusChange?.();
-    } catch (err) {
-      console.error('Failed to toggle pause:', err);
+    } catch (err: any) {
+      onError?.(err?.message || 'Не удалось изменить состояние прокси');
     } finally {
       setTogglingPause(false);
     }
@@ -48,10 +51,23 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
     try {
       await renewProxyCertificate(nodeId, proxy.id);
       onStatusChange?.();
-    } catch (err) {
-      console.error('Failed to renew certificate:', err);
+    } catch (err: any) {
+      onError?.(err?.message || 'Не удалось перевыпустить сертификат');
     } finally {
       setRenewing(false);
+    }
+  };
+
+  const handleRestart = async () => {
+    if (!confirm('Пересобрать контейнер прокси? Он будет недоступен около 20 секунд. Настройки, секрет и ссылка сохранятся.')) return;
+    setRestarting(true);
+    try {
+      await restartProxy(nodeId, proxy.id);
+      onStatusChange?.();
+    } catch (err: any) {
+      onError?.(err?.message || 'Не удалось пересобрать контейнер');
+    } finally {
+      setRestarting(false);
     }
   };
 
@@ -72,6 +88,7 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
           action: () => handleTogglePause(),
         }]
       : []),
+    { text: restarting ? 'Пересобирается…' : 'Пересобрать контейнер', action: () => handleRestart() },
     ...(isWeb
       ? [{ text: renewing ? 'Выпускается…' : 'Перевыпустить сертификат', action: () => handleRenewCert() }]
       : []),

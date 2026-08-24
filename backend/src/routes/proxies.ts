@@ -182,6 +182,24 @@ router.post('/:nodeId/proxies/:proxyId/unpause', async (req: AuthRequest, res: R
   }
 });
 
+// Rebuild the proxy container from its stored settings.
+// Distinct from unpause: this recreates the container rather than resuming it, which is
+// what applies a node upgrade to an existing proxy — and the only way to repair a WEB
+// proxy whose container was built by an older node version.
+router.post('/:nodeId/proxies/:proxyId/restart', async (req: AuthRequest, res: Response) => {
+  try {
+    const node = await getNodeWithToken(req.params.nodeId);
+    if (!node) {
+      res.status(404).json({ error: 'Node not found' });
+      return;
+    }
+    const result = await proxyToNode(node, 'POST', `/${req.params.proxyId}/restart`);
+    res.status(result.status).json(redactProxy(result.data));
+  } catch (error: any) {
+    res.status(502).json({ error: `Failed to connect to node: ${error.message}` });
+  }
+});
+
 // Re-issue the certificate for a WEB proxy
 router.post('/:nodeId/proxies/:proxyId/renew-cert', async (req: AuthRequest, res: Response) => {
   try {

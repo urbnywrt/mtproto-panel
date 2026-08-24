@@ -27,9 +27,9 @@ export default function ProxyDetail() {
   const navigate = useNavigate();
   const {
     nodeId, node, stats, statsHistory, ipHistory, blacklist,
-    loading, error, setError, copied, togglingPause, clearing, nodeGeo, chartRef,
+    loading, error, setError, copied, togglingPause, restarting, clearing, nodeGeo, chartRef,
     proxy, connectedIpSet, statusTheme, statusLabel,
-    handleCopyLink, handleTogglePause, handleClearHistory,
+    handleCopyLink, handleTogglePause, handleRestart, handleClearHistory,
   } = useProxyDetail();
 
   if (loading) {
@@ -132,6 +132,9 @@ export default function ProxyDetail() {
                 {stats.status === 'paused' ? 'Запустить' : 'Пауза'}
               </Button>
             )}
+            <Button view="outlined" size="s" onClick={handleRestart} loading={restarting}>
+              Пересобрать контейнер
+            </Button>
           </div>
         </Card>
       )}

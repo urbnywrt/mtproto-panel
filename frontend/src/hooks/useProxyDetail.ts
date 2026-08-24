@@ -12,6 +12,7 @@ import {
   clearProxyHistory,
   pauseProxy,
   unpauseProxy,
+  restartProxy,
   NodeData,
   ProxyData,
   ProxyStatsData,
@@ -34,6 +35,7 @@ export function useProxyDetail() {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [togglingPause, setTogglingPause] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [nodeGeo, setNodeGeo] = useState('');
   const chartRef = useRef<any>(null);
@@ -131,6 +133,24 @@ export function useProxyDetail() {
     }
   };
 
+  /**
+   * Recreates the container from stored settings — how a node upgrade reaches an
+   * existing proxy, and the only repair for a container built by an older node version.
+   */
+  const handleRestart = async () => {
+    if (!proxyId) return;
+    if (!confirm('Пересобрать контейнер прокси? Он будет недоступен около 20 секунд. Настройки, секрет и ссылка сохранятся.')) return;
+    setRestarting(true);
+    try {
+      await restartProxy(nodeId, proxyId);
+      await loadStats();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setRestarting(false);
+    }
+  };
+
   const handleClearHistory = async () => {
     if (!proxyId) return;
     setClearing(true);
@@ -159,8 +179,8 @@ export function useProxyDetail() {
 
   return {
     nodeId, node, stats, proxy, statsHistory, ipHistory: sortedIpHistory, blacklist,
-    loading, error, setError, copied, togglingPause, clearing, nodeGeo, chartRef,
+    loading, error, setError, copied, togglingPause, restarting, clearing, nodeGeo, chartRef,
     connectedIpSet, statusTheme, statusLabel,
-    handleCopyLink, handleTogglePause, handleClearHistory,
+    handleCopyLink, handleTogglePause, handleRestart, handleClearHistory,
   };
 }

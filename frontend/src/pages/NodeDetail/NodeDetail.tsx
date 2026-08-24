@@ -65,6 +65,7 @@ export default function NodeDetail() {
               onDelete={() => handleDelete(proxy.id)}
               onCopyLink={() => handleCopyLink(proxy.id)}
               onStatusChange={loadData}
+              onError={setError}
             />
           ))}
         </div>
