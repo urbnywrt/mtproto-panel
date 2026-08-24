@@ -1,6 +1,19 @@
 import { useState, useEffect } from 'react';
 import { getNodes, deleteNode, checkNodeHealth, updateNodeService, getProxies, NodeData, ProxyData } from '../api';
 
+export interface UpdateReport {
+  nodeName: string;
+  success: boolean;
+  /** Script output, with terminal colour codes stripped for display. */
+  output: string;
+}
+
+/** update.sh colours its progress; the codes are noise in a dialog. */
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\u001b\[[0-9;]*m/g, '');
+}
+
 export function useNodes() {
   const [nodes, setNodes] = useState<NodeData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -10,6 +23,7 @@ export function useNodes() {
   const [proxiesMap, setProxiesMap] = useState<Record<number, ProxyData[]>>({});
   const [geoMap, setGeoMap] = useState<Record<string, string>>({});
   const [versionMap, setVersionMap] = useState<Record<number, string | null>>({});
+  const [updateResult, setUpdateResult] = useState<UpdateReport | null>(null);
 
   const lookupNodeGeo = async (nodeList: NodeData[]) => {
     const ips = nodeList.map((n) => n.ip).filter((ip) => !geoMap[ip]);
@@ -93,11 +107,24 @@ export function useNodes() {
 
   const handleUpdate = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    const nodeName = nodes.find((n) => n.id === id)?.name || `Нода #${id}`;
     setUpdatingMap((prev) => ({ ...prev, [id]: true }));
     try {
-      await updateNodeService(id);
-    } catch (err) {
-      console.error('Failed to update node:', err);
+      const result = await updateNodeService(id);
+      const body = [result.error, result.output].filter(Boolean).join('\n\n');
+      setUpdateResult({
+        nodeName,
+        success: result.success,
+        output: stripAnsi(body) || (result.success ? 'Обновление завершено.' : 'Нода не вернула вывод.'),
+      });
+      // The node reports its version on health, so refresh to show what actually landed.
+      await loadNodes();
+    } catch (err: any) {
+      setUpdateResult({
+        nodeName,
+        success: false,
+        output: err?.message || 'Не удалось связаться с нодой.',
+      });
     } finally {
       setUpdatingMap((prev) => ({ ...prev, [id]: false }));
     }
@@ -106,6 +133,7 @@ export function useNodes() {
   return {
     nodes, loading, showAdd, setShowAdd,
     healthMap, updatingMap, proxiesMap, geoMap, versionMap,
+    updateResult, setUpdateResult,
     loadNodes, handleDelete, handleUpdate,
   };
 }

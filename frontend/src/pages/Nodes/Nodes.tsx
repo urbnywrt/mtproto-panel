@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Label, Loader } from '@gravity-ui/uikit';
+import { Button, Card, Dialog, Label, Loader } from '@gravity-ui/uikit';
 import AddNodeDialog from '../../components/AddNodeDialog';
 import EditNodeDialog from '../../components/EditNodeDialog';
 import FlagIcon from '../../components/FlagIcon';
@@ -13,6 +13,7 @@ export default function Nodes() {
   const {
     nodes, loading, showAdd, setShowAdd,
     healthMap, updatingMap, proxiesMap, geoMap, versionMap,
+    updateResult, setUpdateResult,
     loadNodes, handleDelete, handleUpdate,
   } = useNodes();
 
@@ -111,6 +112,20 @@ export default function Nodes() {
         onClose={() => setEditing(null)}
         onUpdated={() => { setEditing(null); loadNodes(); }}
       />
+
+      <Dialog open={updateResult !== null} onClose={() => setUpdateResult(null)} size="l">
+        <Dialog.Header caption={`Обновление: ${updateResult?.nodeName || ''}`} />
+        <Dialog.Body>
+          <Label theme={updateResult?.success ? 'success' : 'danger'} size="s">
+            {updateResult?.success ? 'Успешно' : 'С ошибкой'}
+          </Label>
+          <pre className={s.updateOutput}>{updateResult?.output}</pre>
+        </Dialog.Body>
+        <Dialog.Footer
+          textButtonApply="Закрыть"
+          onClickButtonApply={() => setUpdateResult(null)}
+        />
+      </Dialog>
 
       <AddNodeDialog
         open={showAdd}

@@ -141,10 +141,39 @@ export async function checkNodeConnection(ip: string, port: number, token: strin
   });
 }
 
-export async function updateNodeService(id: number): Promise<{ success: boolean; output?: string; error?: string }> {
-  return request<{ success: boolean; output?: string; error?: string }>(`/nodes/${id}/update`, {
+export interface NodeUpdateResult {
+  success: boolean;
+  output?: string;
+  error?: string;
+}
+
+/**
+ * Runs the node's update script. Unlike other calls this resolves on failure too: the
+ * script's output is the useful part of a failed update, and `request` would discard the
+ * body in favour of the error message alone.
+ */
+export async function updateNodeService(id: number): Promise<NodeUpdateResult> {
+  const token = getToken();
+  const response = await fetch(`${API_BASE}/nodes/${id}/update`, {
     method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
+
+  if (response.status === 401) {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
+  const data = await response.json().catch(() => ({}));
+  return {
+    success: response.ok && data.success !== false,
+    output: data.output,
+    error: data.error,
+  };
 }
 
 // Proxies

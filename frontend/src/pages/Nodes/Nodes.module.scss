@@ -119,3 +119,18 @@
   padding: 48px;
   color: var(--g-color-text-secondary);
 }
+
+.updateOutput {
+  margin: 12px 0 0;
+  padding: 12px;
+  max-height: 55vh;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--g-color-base-generic);
+  color: var(--g-color-text-primary);
+  font-family: var(--g-font-family-monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
