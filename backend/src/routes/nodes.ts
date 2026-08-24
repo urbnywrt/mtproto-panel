@@ -165,6 +165,35 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // Trigger update on a node
+// Outcome of the last update. The node's own update request cannot report it: the
+// script replaces the container serving that request. The panel polls this instead.
+router.get('/:id/update-log', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query('SELECT ip, port, token FROM nodes WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Node not found' });
+      return;
+    }
+    const node = result.rows[0];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const resp = await fetch(`http://${node.ip}:${node.port}/api/update/log`, {
+        headers: { Authorization: `Bearer ${node.token}` },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      const data = await resp.json();
+      res.status(resp.status).json(data);
+    } catch (err: any) {
+      clearTimeout(timeout);
+      res.status(502).json({ error: `Failed to connect to node: ${err.message}` });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/:id/update', async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query('SELECT ip, port, token FROM nodes WHERE id = $1', [req.params.id]);

@@ -141,10 +141,26 @@ export async function checkNodeConnection(ip: string, port: number, token: strin
   });
 }
 
+export interface NodeUpdateLog {
+  exists: boolean;
+  running: boolean;
+  /** Exit code of the finished update; null while it is still running. */
+  exitCode: number | null;
+  output: string;
+  finishedAt: string | null;
+}
+
+/** Reads the outcome of an update that outlived the request which started it. */
+export async function getNodeUpdateLog(id: number): Promise<NodeUpdateLog> {
+  return request<NodeUpdateLog>(`/nodes/${id}/update-log`);
+}
+
 export interface NodeUpdateResult {
   success: boolean;
   output?: string;
   error?: string;
+  /** The node delegated the work to a sidecar and is about to restart. */
+  async?: boolean;
 }
 
 /**
@@ -173,6 +189,7 @@ export async function updateNodeService(id: number): Promise<NodeUpdateResult> {
     success: response.ok && data.success !== false,
     output: data.output,
     error: data.error,
+    async: data.async === true,
   };
 }
 

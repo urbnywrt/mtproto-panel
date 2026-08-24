@@ -1,11 +1,42 @@
 import { useState, useEffect } from 'react';
-import { getNodes, deleteNode, checkNodeHealth, updateNodeService, getProxies, NodeData, ProxyData } from '../api';
+import { getNodes, deleteNode, checkNodeHealth, updateNodeService, getNodeUpdateLog, getProxies, NodeData, ProxyData } from '../api';
 
 export interface UpdateReport {
   nodeName: string;
   success: boolean;
+  /** Still running: the dialog shows progress instead of a verdict. */
+  pending?: boolean;
   /** Script output, with terminal colour codes stripped for display. */
   output: string;
+}
+
+/**
+ * The update replaces the node's own container, so the request that started it cannot
+ * report the outcome — the node goes unreachable and comes back. Failures here are
+ * expected until it does; only the timeout is final.
+ */
+async function waitForUpdate(id: number, timeoutMs = 360000): Promise<{ success: boolean; output: string }> {
+  const started = Date.now();
+  let lastError = '';
+  while (Date.now() - started < timeoutMs) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    try {
+      const log = await getNodeUpdateLog(id);
+      // The node answers again while the sidecar is still restoring proxies, so wait
+      // for the sidecar itself rather than for the node to come back.
+      if (!log.running) {
+        return { success: log.exitCode === 0, output: log.output || 'Журнал обновления пуст.' };
+      }
+    } catch (err: any) {
+      lastError = err?.message || String(err);
+    }
+  }
+  return {
+    success: false,
+    output: lastError
+      ? `Нода не сообщила о результате за 6 минут. Последняя ошибка связи: ${lastError}`
+      : 'Нода не сообщила о результате за 6 минут.',
+  };
 }
 
 /** update.sh colours its progress; the codes are noise in a dialog. */
@@ -111,12 +142,24 @@ export function useNodes() {
     setUpdatingMap((prev) => ({ ...prev, [id]: true }));
     try {
       const result = await updateNodeService(id);
-      const body = [result.error, result.output].filter(Boolean).join('\n\n');
-      setUpdateResult({
-        nodeName,
-        success: result.success,
-        output: stripAnsi(body) || (result.success ? 'Обновление завершено.' : 'Нода не вернула вывод.'),
-      });
+
+      if (result.async) {
+        setUpdateResult({
+          nodeName,
+          success: true,
+          pending: true,
+          output: 'Обновление идёт в отдельном контейнере. Нода сейчас перезапустится — это занимает 1–3 минуты.',
+        });
+        const finished = await waitForUpdate(id);
+        setUpdateResult({ nodeName, success: finished.success, output: stripAnsi(finished.output) });
+      } else {
+        const body = [result.error, result.output].filter(Boolean).join('\n\n');
+        setUpdateResult({
+          nodeName,
+          success: result.success,
+          output: stripAnsi(body) || (result.success ? 'Обновление завершено.' : 'Нода не вернула вывод.'),
+        });
+      }
       // The node reports its version on health, so refresh to show what actually landed.
       await loadNodes();
     } catch (err: any) {

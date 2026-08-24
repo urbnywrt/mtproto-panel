@@ -116,8 +116,8 @@ export default function Nodes() {
       <Dialog open={updateResult !== null} onClose={() => setUpdateResult(null)} size="l">
         <Dialog.Header caption={`Обновление: ${updateResult?.nodeName || ''}`} />
         <Dialog.Body>
-          <Label theme={updateResult?.success ? 'success' : 'danger'} size="s">
-            {updateResult?.success ? 'Успешно' : 'С ошибкой'}
+          <Label theme={updateResult?.pending ? 'info' : updateResult?.success ? 'success' : 'danger'} size="s">
+            {updateResult?.pending ? 'Выполняется' : updateResult?.success ? 'Успешно' : 'С ошибкой'}
           </Label>
           <pre className={s.updateOutput}>{updateResult?.output}</pre>
         </Dialog.Body>
