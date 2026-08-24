@@ -134,12 +134,13 @@ export function useProxyDetail() {
   };
 
   /**
-   * Recreates the container from stored settings — how a node upgrade reaches an
-   * existing proxy, and the only repair for a container built by an older node version.
+   * Recreates the container from stored settings using the telemt image already on the
+   * node — no image is pulled or built. This is how updated node code reaches an
+   * existing proxy, and the only repair for a container created by an older version.
    */
   const handleRestart = async () => {
     if (!proxyId) return;
-    if (!confirm('Пересобрать контейнер прокси? Он будет недоступен около 20 секунд. Настройки, секрет и ссылка сохранятся.')) return;
+    if (!confirm('Пересоздать контейнер прокси? Он будет недоступен около 20 секунд. Настройки, секрет и ссылка сохранятся.')) return;
     setRestarting(true);
     try {
       await restartProxy(nodeId, proxyId);

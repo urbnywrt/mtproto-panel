@@ -59,13 +59,13 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
   };
 
   const handleRestart = async () => {
-    if (!confirm('Пересобрать контейнер прокси? Он будет недоступен около 20 секунд. Настройки, секрет и ссылка сохранятся.')) return;
+    if (!confirm('Пересоздать контейнер прокси? Он будет недоступен около 20 секунд. Настройки, секрет и ссылка сохранятся.')) return;
     setRestarting(true);
     try {
       await restartProxy(nodeId, proxy.id);
       onStatusChange?.();
     } catch (err: any) {
-      onError?.(err?.message || 'Не удалось пересобрать контейнер');
+      onError?.(err?.message || 'Не удалось пересоздать контейнер');
     } finally {
       setRestarting(false);
     }
@@ -88,7 +88,7 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
           action: () => handleTogglePause(),
         }]
       : []),
-    { text: restarting ? 'Пересобирается…' : 'Пересобрать контейнер', action: () => handleRestart() },
+    { text: restarting ? 'Пересоздаётся…' : 'Пересоздать контейнер', action: () => handleRestart() },
     ...(isWeb
       ? [{ text: renewing ? 'Выпускается…' : 'Перевыпустить сертификат', action: () => handleRenewCert() }]
       : []),

@@ -133,7 +133,7 @@ export default function ProxyDetail() {
               </Button>
             )}
             <Button view="outlined" size="s" onClick={handleRestart} loading={restarting}>
-              Пересобрать контейнер
+              Пересоздать контейнер
             </Button>
           </div>
         </Card>
