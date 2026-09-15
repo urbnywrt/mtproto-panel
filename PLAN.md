@@ -1,6 +1,6 @@
 # WEB proxy support — план реализации (mtproto-panel)
 
-Ветка: `feature/web-proxy`. Ведущий план и вся архитектура — в `mtproto-node/PLAN.md`
+Ветка: `feature/web-proxy`, влита в `master` форка. Ведущий план и вся архитектура — в `mtproto-node/PLAN.md`
 (этапы 1–5 и 8). Здесь только этапы 6 и 7.
 
 ---

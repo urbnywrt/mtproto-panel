@@ -2,6 +2,10 @@
 
 Веб-панель управления MTProto прокси серверами. Позволяет централизованно управлять несколькими сервис-нодами, создавать и настраивать прокси, просматривать статистику и следить за подключениями.
 
+> Это форк [danielVNru/mtproto-panel](https://github.com/danielVNru/mtproto-panel) с поддержкой **Telegram WEB proxy**.
+> Установщик, `update.sh` и готовые образы (`ghcr.io/urbnywrt/mtproto-panel-*`) по умолчанию берутся из этого форка.
+> Работает в паре с нодами [urbnywrt/mtproto-node](https://github.com/urbnywrt/mtproto-node).
+
 ## Возможности
 
 - Управление несколькими сервис-нодами с единой панели
@@ -61,27 +65,65 @@
 Одна команда для загрузки и запуска:
 
 ```bash
-bash <(wget -qO- https://raw.githubusercontent.com/danielVNru/mtproto-panel/master/install.sh)
+wget -qO /tmp/panel-install.sh https://raw.githubusercontent.com/urbnywrt/mtproto-panel/master/install.sh && sudo bash /tmp/panel-install.sh
 ```
 
 Скрипт автоматически:
 1. Установит Docker и Docker Compose (если отсутствуют)
-2. Скачает последнюю версию из ветки `master`
+2. Склонирует ветку `master` форка `urbnywrt/mtproto-panel` — `origin` будет смотреть на него же
 3. Запросит настройки:
    - **Порт панели** (по умолчанию `80`)
-   - **Логин администратора**
-   - **Пароль администратора**
+   - **SSL**: без SSL, самоподписанный сертификат или Let's Encrypt
+   - **Логин и пароль администратора**
 4. Сгенерирует JWT-секрет и пароль БД
-5. Соберёт и запустит все контейнеры
+5. Скачает готовые образы из `ghcr.io/urbnywrt` (соберёт локально, если реестр недоступен) и запустит контейнеры
 
 Панель установится в `/opt/mtproto-panel`.
 
+### SSL
+
+| Вариант | Что происходит |
+|---|---|
+| 1. Без SSL | панель по HTTP на выбранном порту |
+| 2. Самоподписанный | сертификат на IP сервера, панель по HTTPS на выбранном порту |
+| 3. Let's Encrypt | нужен домен с A-записью на сервер; на время выпуска certbot занимает порт 80 и останавливает nginx/apache/caddy на хосте. Продление — cron раз в два месяца |
+
+Для вариантов 2 и 3 установщик создаёт `docker-compose.override.yml` и `nginx-ssl.conf`:
+выбранный порт публикуется на HTTPS, а `PORT` в `.env` переписывается на `18080`
+(там HTTP-редирект), чтобы не занимать хостовый 80.
+
 ## Обновление
+
+По SSH:
 
 ```bash
 cd /opt/mtproto-panel
-git pull origin master
-docker compose up -d --build
+sudo bash update.sh
+```
+
+Скрипт берёт код из `master` форка, тянет образы `:latest` из GHCR и перезапускает
+контейнеры.
+
+> Кнопкой «Обновить» в настройках панели пока не пользуйтесь. Она запускает `update.sh`
+> внутри контейнера бэкенда, а `docker compose down` удаляет этот контейнер вместе со
+> скриптом — панель остаётся выключенной до ручного запуска. У ноды это уже исправлено
+> контейнером-спутником, у панели ещё нет.
+
+Образы панели публикуются только как `:latest` (из master) и `:<sha>`, без тегов веток.
+Поэтому после `bash update.sh --b=<ветка>` соберите образы из кода этой ветки:
+`docker compose up -d --build`, иначе поверх её исходников запустится `:latest`.
+
+Перед обновлением `git status --short` должен быть пустым: локальные правки
+отслеживаемых файлов (`docker-compose.yml`, `frontend/nginx.conf`) конфликтуют
+с новой версией. Порты и образы задаются в `.env`.
+
+Панель, поставленная из репозитория автора, переводится на форк так же, как нода, —
+см. [UPGRADE.md ноды](https://github.com/urbnywrt/mtproto-node/blob/master/UPGRADE.md):
+
+```bash
+cd /opt/mtproto-panel
+git remote set-url origin https://github.com/urbnywrt/mtproto-panel.git
+sudo bash update.sh
 ```
 
 ## Структура контейнеров
@@ -96,17 +138,19 @@ docker compose up -d --build
 
 | Переменная | Описание |
 |------------|----------|
-| `PORT` | Внешний порт панели |
+| `PORT` | Хостовый порт HTTP панели (по умолчанию `80`). С SSL — `18080`, порт HTTPS задан в `docker-compose.override.yml` |
 | `ADMIN_USERNAME` | Логин администратора |
 | `ADMIN_PASSWORD` | Пароль администратора |
 | `JWT_SECRET` | Секрет для JWT токенов |
 | `DB_NAME` | Имя базы данных |
 | `DB_USER` | Пользователь БД |
 | `DB_PASSWORD` | Пароль БД |
+| `IMAGE_REPO` | Реестр образов (по умолчанию `ghcr.io/urbnywrt`) |
+| `IMAGE_TAG` | Тег образов (по умолчанию `latest`), можно закрепить на sha коммита |
 
 ## Использование
 
-1. Откройте панель: `http://SERVER_IP:PORT`
+1. Откройте панель по адресу, который напечатал установщик (`http://SERVER_IP:PORT` или `https://...`)
 2. Войдите с логином и паролем администратора
 3. Добавьте сервис-ноду (IP, порт, токен)
 4. Создавайте прокси, управляйте лимитами и чёрными списками
@@ -170,4 +214,6 @@ docker compose up -d --build
 
 ## Связанный проект
 
-Сервис-нода (устанавливается на каждый прокси-сервер): [mtproto-node](https://github.com/danielVNru/mtproto-node)
+Сервис-нода (устанавливается на каждый прокси-сервер): [urbnywrt/mtproto-node](https://github.com/urbnywrt/mtproto-node)
+
+Исходный проект: [danielVNru/mtproto-panel](https://github.com/danielVNru/mtproto-panel)
