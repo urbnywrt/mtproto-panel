@@ -2,21 +2,37 @@ name: Build & Push Docker Images
 
 on:
   push:
-    branches: [master, dev]
+    branches: [master, dev, 'feature/**']
   workflow_dispatch:
 
 jobs:
-  build-backend:
-    name: Build Backend
+  build:
+    name: Build ${{ matrix.component }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        component: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
 
       - name: Set lowercase owner
         run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      # Every branch gets its own tag so update.sh --b=<branch> pulls that branch's build.
+      # Only master and dev move :latest — a manual run from another branch used to
+      # publish it as :latest, which every panel on master would then pull.
+      - name: Derive image tags
+        run: |
+          SLUG=$(echo "${GITHUB_REF_NAME}" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+          echo "SLUG=$SLUG" >> $GITHUB_ENV
+          if [ "$GITHUB_REF_NAME" = "master" ] || [ "$GITHUB_REF_NAME" = "dev" ]; then
+            echo "MOVE_LATEST=true" >> $GITHUB_ENV
+          else
+            echo "MOVE_LATEST=false" >> $GITHUB_ENV
+          fi
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -28,46 +44,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push backend
+      - name: Build and push ${{ matrix.component }}
         uses: docker/build-push-action@v5
         with:
-          context: ./backend
+          context: ./${{ matrix.component }}
           push: true
+          provenance: false
           tags: |
-            ghcr.io/${{ env.OWNER }}/mtproto-panel-backend:latest
-            ghcr.io/${{ env.OWNER }}/mtproto-panel-backend:${{ github.sha }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
-
-  build-frontend:
-    name: Build Frontend
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set lowercase owner
-        run: echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: |
-            ghcr.io/${{ env.OWNER }}/mtproto-panel-frontend:latest
-            ghcr.io/${{ env.OWNER }}/mtproto-panel-frontend:${{ github.sha }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+            ghcr.io/${{ env.OWNER }}/mtproto-panel-${{ matrix.component }}:${{ env.SLUG }}
+            ghcr.io/${{ env.OWNER }}/mtproto-panel-${{ matrix.component }}:${{ github.sha }}
+            ${{ env.MOVE_LATEST == 'true' && format('ghcr.io/{0}/mtproto-panel-{1}:latest', env.OWNER, matrix.component) || '' }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
