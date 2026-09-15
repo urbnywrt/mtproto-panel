@@ -41,3 +41,27 @@ export function certBadge(proxy: Pick<ProxyData, 'certStatus' | 'certExpiresAt' 
   if (proxy.certStatus === 'active') return { theme: 'success', text: 'выпущен' };
   return { theme: 'warning', text: 'выпускается' };
 }
+
+export interface TelemtBadge {
+  theme: BadgeTheme;
+  text: string;
+  hint: string;
+}
+
+/**
+ * Which telemt a proxy container runs. Updating the node rebuilds the image but leaves
+ * running containers on the old binary, so an outdated one is flagged until recreated.
+ * null for nodes too old to report it.
+ */
+export function telemtBadge(proxy: Pick<ProxyData, 'telemtVersion' | 'telemtOutdated' | 'status'>): TelemtBadge | null {
+  if (proxy.telemtVersion === undefined) return null;
+  if (proxy.status === 'error' && !proxy.telemtVersion) return null;
+  if (proxy.telemtOutdated) {
+    return {
+      theme: 'warning',
+      text: proxy.telemtVersion ? `${proxy.telemtVersion}, устарел` : 'старая версия',
+      hint: 'Контейнер работает на прежней версии telemt. Пересоздайте контейнер, чтобы обновить.',
+    };
+  }
+  return { theme: 'unknown', text: proxy.telemtVersion || 'неизвестно', hint: 'Версия telemt в контейнере прокси' };
+}

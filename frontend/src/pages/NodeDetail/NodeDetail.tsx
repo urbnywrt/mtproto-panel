@@ -15,7 +15,7 @@ export default function NodeDetail() {
     showAdd, setShowAdd, editProxy, setEditProxy, copiedId,
     domainsText, setDomainsText, domainsLoading, domainsSaving, domainsLoaded,
     blacklistText, setBlacklistText, blacklistLoading, blacklistSaving, blacklistLoaded,
-    nodeGeo, loadData, handleDelete, handleCopyLink, handleSaveDomains, handleSaveBlacklist,
+    nodeGeo, telemtVersion, loadData, handleDelete, handleCopyLink, handleSaveDomains, handleSaveBlacklist,
     exportLoading, importLoading, importResult, handleExport, handleImport,
   } = useNodeDetail();
 
@@ -33,6 +33,11 @@ export default function NodeDetail() {
           <>
             <h2 className={s.nameRow}>{nodeGeo && <FlagIcon code={nodeGeo} />}{node.name}</h2>
             <Label theme="info">{node.ip}:{node.port}</Label>
+            {telemtVersion && (
+              <span title="Версия telemt, которую получают новые и пересозданные прокси">
+                <Label theme="unknown">telemt {telemtVersion}</Label>
+              </span>
+            )}
           </>
         )}
       </div>

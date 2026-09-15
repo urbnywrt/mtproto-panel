@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Button, Label, DropdownMenu } from '@gravity-ui/uikit';
 import { pauseProxy, unpauseProxy, restartProxy, renewProxyCertificate, ProxyData } from '../api';
-import { certBadge, isWebProxy } from '../utils/proxyType';
+import { certBadge, isWebProxy, telemtBadge } from '../utils/proxyType';
 import { formatBytes } from '../utils/format';
 import s from './ProxyCard.module.scss';
 
@@ -26,6 +26,7 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
   const [restarting, setRestarting] = useState(false);
   const isWeb = isWebProxy(proxy);
   const cert = certBadge(proxy);
+  const telemt = telemtBadge(proxy);
 
   const statusTheme = proxy.status === 'running' ? 'success' : proxy.status === 'stopped' || proxy.status === 'paused' ? 'warning' : 'danger';
   const statusLabel = proxy.status === 'running' ? 'работает' : proxy.status === 'paused' ? 'пауза' : proxy.status === 'stopped' ? 'остановлен' : 'ошибка';
@@ -130,6 +131,14 @@ export default function ProxyCard({ proxy, nodeId, nodeName, copied, onEdit, onD
           <span className={s.label}>Сертификат</span>
           <span title={proxy.certLastError || undefined}>
             <Label theme={cert.theme} size="s">{cert.text}</Label>
+          </span>
+        </div>
+      )}
+      {telemt && (
+        <div className={s.field}>
+          <span className={s.label}>telemt</span>
+          <span title={telemt.hint}>
+            <Label theme={telemt.theme} size="s">{telemt.text}</Label>
           </span>
         </div>
       )}

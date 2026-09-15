@@ -12,7 +12,7 @@ export default function Nodes() {
   const navigate = useNavigate();
   const {
     nodes, loading, showAdd, setShowAdd,
-    healthMap, updatingMap, proxiesMap, geoMap, versionMap,
+    healthMap, updatingMap, proxiesMap, geoMap, versionMap, telemtMap,
     updateResult, setUpdateResult,
     loadNodes, handleDelete, handleUpdate,
   } = useNodes();
@@ -65,6 +65,22 @@ export default function Nodes() {
               <div className="proxy-card-field"><span className="label">Порт</span><span>{node.port}</span></div>
               <div className="proxy-card-field"><span className="label">Добавлено</span><span>{new Date(node.created_at).toLocaleDateString()}</span></div>
               {versionMap[node.id] && <div className="proxy-card-field"><span className="label">Версия</span><span>v{versionMap[node.id]}</span></div>}
+              {telemtMap[node.id] && (
+                <div className="proxy-card-field">
+                  <span className="label">telemt</span>
+                  <span>
+                    {telemtMap[node.id]}
+                    {(() => {
+                      const outdated = (proxiesMap[node.id] || []).filter((p) => p.telemtOutdated).length;
+                      return outdated > 0 ? (
+                        <span title="Эти контейнеры работают на прежней версии telemt. Пересоздайте их, чтобы обновить.">
+                          {' '}<Label theme="warning" size="xs">устарел у {outdated}</Label>
+                        </span>
+                      ) : null;
+                    })()}
+                  </span>
+                </div>
+              )}
 
               {proxiesMap[node.id] && proxiesMap[node.id].length > 0 && (
                 <div className={s.proxiesSection}>

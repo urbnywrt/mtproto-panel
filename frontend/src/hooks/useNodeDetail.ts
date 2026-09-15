@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { copyToClipboard } from '../utils/clipboard';
 import {
   getNode,
+  checkNodeHealth,
   getProxies,
   deleteProxy,
   getProxyLink,
@@ -36,6 +37,7 @@ export function useNodeDetail() {
   const [blacklistSaving, setBlacklistSaving] = useState(false);
   const [blacklistLoaded, setBlacklistLoaded] = useState(false);
   const [nodeGeo, setNodeGeo] = useState('');
+  const [telemtVersion, setTelemtVersion] = useState<string | null>(null);
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
@@ -64,6 +66,10 @@ export function useNodeDetail() {
         .then((d: any) => { if (d.countryCode) setNodeGeo(d.countryCode); })
         .catch(() => {});
     }).catch(() => {});
+
+    checkNodeHealth(nodeId)
+      .then((h) => setTelemtVersion(h.telemtVersion ?? null))
+      .catch(() => {});
 
     setDomainsLoading(true);
     getNodeDomains(nodeId)
@@ -161,7 +167,7 @@ export function useNodeDetail() {
     showAdd, setShowAdd, editProxy, setEditProxy, copiedId,
     domainsText, setDomainsText, domainsLoading, domainsSaving, domainsLoaded,
     blacklistText, setBlacklistText, blacklistLoading, blacklistSaving, blacklistLoaded,
-    nodeGeo, loadData, handleDelete, handleCopyLink, handleSaveDomains, handleSaveBlacklist,
+    nodeGeo, telemtVersion, loadData, handleDelete, handleCopyLink, handleSaveDomains, handleSaveBlacklist,
     exportLoading, importLoading, importResult, handleExport, handleImport,
   };
 }

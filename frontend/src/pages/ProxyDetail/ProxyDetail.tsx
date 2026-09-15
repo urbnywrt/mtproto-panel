@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Loader, Label, Alert, Tooltip } from '@gravity-ui/uikit';
-import { certBadge, isWebProxy } from '../../utils/proxyType';
+import { certBadge, isWebProxy, telemtBadge } from '../../utils/proxyType';
 import { Line } from 'react-chartjs-2';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import 'chartjs-adapter-date-fns';
@@ -49,6 +49,11 @@ export default function ProxyDetail() {
               </Label>
             )}
             <Label theme={statusTheme} size="s">{statusLabel}</Label>
+            {proxy && telemtBadge(proxy) && (
+              <span title={telemtBadge(proxy)!.hint}>
+                <Label theme={telemtBadge(proxy)!.theme} size="s">telemt {telemtBadge(proxy)!.text}</Label>
+              </span>
+            )}
           </>
         )}
         {node && (

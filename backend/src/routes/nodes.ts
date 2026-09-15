@@ -137,7 +137,7 @@ router.get('/:id/health', async (req: AuthRequest, res: Response) => {
       clearTimeout(timeout);
       if (resp.ok) {
         const body = await resp.json().catch(() => ({})) as Record<string, unknown>;
-        res.json({ online: true, version: body.version ?? null });
+        res.json({ online: true, version: body.version ?? null, telemtVersion: body.telemtVersion ?? null });
       } else {
         res.json({ online: false });
       }
