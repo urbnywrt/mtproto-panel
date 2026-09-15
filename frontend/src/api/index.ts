@@ -53,8 +53,45 @@ export async function getPanelVersion(): Promise<{ version: string }> {
   return request<{ version: string }>('/system/version');
 }
 
-export async function updatePanel(): Promise<{ success: boolean; message: string }> {
-  return request<{ success: boolean; message: string }>('/system/update', { method: 'POST' });
+export interface UpdateLog {
+  exists: boolean;
+  running: boolean;
+  /** Exit code of the finished update; null while it is still running. */
+  exitCode: number | null;
+  output: string;
+  finishedAt: string | null;
+}
+
+export interface UpdateStartResult {
+  success: boolean;
+  output?: string;
+  error?: string;
+  /** The work went to a sidecar container; poll the log for the outcome. */
+  async?: boolean;
+}
+
+/** Resolves on failure too: the script output is the useful part of a failed start. */
+export async function updatePanel(): Promise<UpdateStartResult> {
+  const token = getToken();
+  const response = await fetch(`${API_BASE}/system/update`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  return {
+    success: response.ok && data.success !== false,
+    output: data.output,
+    error: data.error,
+    async: data.async === true,
+  };
+}
+
+/** Outcome of a panel self-update that outlived the request which started it. */
+export async function getPanelUpdateLog(): Promise<UpdateLog> {
+  return request<UpdateLog>('/system/update/log');
 }
 
 export function logout() {
@@ -130,8 +167,15 @@ export async function deleteNode(id: number) {
   return request<{ success: boolean }>(`/nodes/${id}`, { method: 'DELETE' });
 }
 
-export async function checkNodeHealth(id: number): Promise<{ online: boolean; version?: string | null }> {
-  return request<{ online: boolean; version?: string | null }>(`/nodes/${id}/health`);
+export interface NodeHealth {
+  online: boolean;
+  version?: string | null;
+  /** telemt version new and recreated proxy containers get. Absent on older nodes. */
+  telemtVersion?: string | null;
+}
+
+export async function checkNodeHealth(id: number): Promise<NodeHealth> {
+  return request<NodeHealth>(`/nodes/${id}/health`);
 }
 
 export async function checkNodeConnection(ip: string, port: number, token: string): Promise<{ online: boolean }> {
@@ -236,6 +280,10 @@ export interface ProxyData extends WebProxyFields {
   domain: string;
   containerName: string;
   status: 'running' | 'stopped' | 'paused' | 'error';
+  /** telemt version inside the container; null when unknown. Absent on older nodes. */
+  telemtVersion?: string | null;
+  /** The container runs a different telemt than the node builds — recreate to update. */
+  telemtOutdated?: boolean;
   createdAt: string;
   tag?: string;
   trafficUp: number;

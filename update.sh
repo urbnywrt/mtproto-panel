@@ -12,12 +12,17 @@ echo -e "${CYAN}  MTProto Panel - Обновление            ${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
-# Парсим аргументы
+# Парсим аргументы. Исходный список сохраняем: его же получит контейнер-спутник.
+ARGS=("$@")
 FORCE_BRANCH=""
+FORCE_BUILD=0
+FORCE_PULL=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --b=*) FORCE_BRANCH="${1#--b=}"; shift ;;
         --b) FORCE_BRANCH="$2"; shift 2 ;;
+        --build) FORCE_BUILD=1; shift ;;
+        --pull) FORCE_PULL=1; shift ;;
         *) shift ;;
     esac
 done
@@ -48,6 +53,40 @@ if [ ! -f ".env" ]; then
     echo -e "${RED}Ошибка: файл .env не найден.${NC}"
     echo -e "Убедитесь что панель была установлена через install.sh."
     exit 1
+fi
+
+# Кнопка «Обновить» в настройках запускает скрипт внутри контейнера бэкенда. Там он
+# убивал сам себя: `docker compose down` удаляет контейнер, в котором работает скрипт,
+# и поднимать панель обратно было некому. Поэтому перезапускаемся в контейнере-спутнике —
+# он не входит в compose-проект, и `down` его не трогает.
+#
+# Каталог проекта монтируется по тому же пути, что и на хосте: демон трактует
+# относительные пути docker-compose.yml как хостовые, и из каталога, смонтированного
+# куда-то ещё, `.:/app/project` указал бы в пустоту.
+if [ -f /.dockerenv ] && [ "${MTPROTO_UPDATE_SIDECAR:-0}" != "1" ]; then
+    SELF_NAME="mtproto-panel-backend"
+    HOST_PROJECT=$(docker inspect "$SELF_NAME" --format '{{range .Mounts}}{{if eq .Destination "/app/project"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
+    SELF_IMAGE=$(docker inspect "$SELF_NAME" --format '{{.Config.Image}}' 2>/dev/null || true)
+
+    if [ -z "$HOST_PROJECT" ] || [ -z "$SELF_IMAGE" ]; then
+        echo -e "${RED}Не удалось определить каталог проекта на хосте.${NC}"
+        echo -e "Обновление отменено, чтобы не оставить панель выключенной."
+        exit 1
+    fi
+
+    docker rm -f mtproto-panel-updater >/dev/null 2>&1 || true
+    docker run -d --name mtproto-panel-updater \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v "${HOST_PROJECT}":"${HOST_PROJECT}" \
+        -w "${HOST_PROJECT}" \
+        -e MTPROTO_UPDATE_SIDECAR=1 \
+        -e HOST_PROJECT="${HOST_PROJECT}" \
+        "$SELF_IMAGE" \
+        bash -c 'bash update.sh "$@" > "${HOST_PROJECT}/update.log" 2>&1' _ "${ARGS[@]}" >/dev/null
+
+    echo -e "${GREEN}Обновление запущено в отдельном контейнере mtproto-panel-updater.${NC}"
+    echo -e "Панель перезапустится сама; журнал — update.log"
+    exit 0
 fi
 
 echo -e "${CYAN}[1/4] Получение обновлений из репозитория...${NC}"
@@ -84,10 +123,24 @@ docker compose down
 echo -e "${GREEN}  Панель остановлена.${NC}"
 
 echo -e "${CYAN}[3/4] Загрузка обновлённых образов...${NC}"
-if docker compose pull 2>/dev/null; then
+
+# Каждая ветка публикуется в GHCR под своим тегом, а :latest двигают только master и dev.
+# Тянуть :latest, обновляясь с другой ветки, значит запустить чужой код поверх её
+# исходников — молча и без единой ошибки. Поэтому для ветки берём её собственный тег.
+if [ "$FORCE_BUILD" -eq 0 ] && [ "$FORCE_PULL" -eq 0 ] && [ "$BRANCH" != "master" ] && [ "$BRANCH" != "dev" ]; then
+    if [ -z "${IMAGE_TAG:-}" ] && ! grep -q '^IMAGE_TAG=' .env 2>/dev/null; then
+        IMAGE_TAG=$(echo "$BRANCH" | tr '/' '-' | tr '[:upper:]' '[:lower:]')
+        export IMAGE_TAG
+        echo -e "  Тег образов для ветки: ${YELLOW}${IMAGE_TAG}${NC}"
+    fi
+fi
+
+if [ "$FORCE_BUILD" -eq 1 ]; then
+    BUILDX_NO_DEFAULT_ATTESTATIONS=1 DOCKER_BUILDKIT=1 docker compose build
+elif docker compose pull 2>/dev/null; then
     echo -e "${GREEN}  Образы загружены из реестра.${NC}"
 else
-    echo -e "${YELLOW}  Не удалось загрузить образы из реестра, собираем локально...${NC}"
+    echo -e "${YELLOW}  Готовых образов нет, собираем локально...${NC}"
     BUILDX_NO_DEFAULT_ATTESTATIONS=1 DOCKER_BUILDKIT=1 docker compose build
 fi
 

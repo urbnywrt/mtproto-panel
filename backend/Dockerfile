@@ -1,9 +1,10 @@
 FROM node:20-alpine
 
-# Required for running update.sh from inside the container
-RUN apk add --no-cache bash git docker-cli \
+# Required for running update.sh from inside the container. Without the compose plugin
+# the script failed on its first `docker compose` call.
+RUN apk add --no-cache bash git docker-cli docker-cli-compose \
     || (sed -i 's|https://|http://|g' /etc/apk/repositories \
-        && apk add --no-cache bash git docker-cli)
+        && apk add --no-cache bash git docker-cli docker-cli-compose)
 
 WORKDIR /app
 

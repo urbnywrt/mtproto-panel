@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { execFile } from 'child_process';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { config } from './config';
 import { runMigrations, createAdminUser } from './db/migrations';
@@ -34,12 +34,45 @@ app.get('/api/system/version', authMiddleware, (_req, res) => {
   res.json({ version });
 });
 
-// Trigger panel self-update (fires update.sh and returns immediately)
+const PROJECT_DIR = '/app/project';
+const UPDATER_CONTAINER = 'mtproto-panel-updater';
+
+// Trigger panel self-update. update.sh hands the work to a sidecar container and returns
+// at once: run here, `docker compose down` would kill this container together with the
+// script and leave the panel down. The outcome is read later from /api/system/update/log.
 app.post('/api/system/update', authMiddleware, (_req, res) => {
-  const scriptPath = '/app/project/update.sh';
-  // Fire and forget — container will rebuild itself
-  execFile('/bin/bash', [scriptPath], { cwd: '/app/project', timeout: 300000 }, () => {});
-  res.json({ success: true, message: 'Обновление запущено. Панель перезапустится через несколько минут.' });
+  execFile('/bin/bash', [join(PROJECT_DIR, 'update.sh')], { cwd: PROJECT_DIR, timeout: 60000 }, (error, stdout, stderr) => {
+    if (error) {
+      res.status(500).json({ success: false, error: error.message, output: stderr || stdout });
+      return;
+    }
+    res.json({ success: true, output: stdout, async: stdout.includes(UPDATER_CONTAINER) });
+  });
+});
+
+// Result of the last self-update. The request that started it cannot report the outcome:
+// its container is replaced mid-way, so the page polls this until the sidecar exits.
+app.get('/api/system/update/log', authMiddleware, (_req, res) => {
+  execFile(
+    'docker',
+    ['inspect', UPDATER_CONTAINER, '--format', '{{.State.Running}} {{.State.ExitCode}}'],
+    { timeout: 15000 },
+    (error, stdout) => {
+      const exists = !error;
+      const [runningRaw, exitRaw] = exists ? stdout.trim().split(' ') : [];
+      const running = runningRaw === 'true';
+      const finished = exists && !running;
+      const logPath = join(PROJECT_DIR, 'update.log');
+      const hasLog = existsSync(logPath);
+      res.json({
+        exists,
+        running,
+        exitCode: finished ? Number(exitRaw) : null,
+        output: hasLog ? readFileSync(logPath, 'utf-8') : '',
+        finishedAt: finished && hasLog ? statSync(logPath).mtime.toISOString() : null,
+      });
+    },
+  );
 });
 
 async function bootstrap(): Promise<void> {

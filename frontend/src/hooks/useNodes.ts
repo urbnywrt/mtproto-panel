@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getNodes, deleteNode, checkNodeHealth, updateNodeService, getNodeUpdateLog, getProxies, NodeData, ProxyData } from '../api';
+import { stripAnsi } from '../utils/format';
 
 export interface UpdateReport {
   nodeName: string;
@@ -39,12 +40,6 @@ async function waitForUpdate(id: number, timeoutMs = 360000): Promise<{ success:
   };
 }
 
-/** update.sh colours its progress; the codes are noise in a dialog. */
-function stripAnsi(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/\u001b\[[0-9;]*m/g, '');
-}
-
 export function useNodes() {
   const [nodes, setNodes] = useState<NodeData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +49,7 @@ export function useNodes() {
   const [proxiesMap, setProxiesMap] = useState<Record<number, ProxyData[]>>({});
   const [geoMap, setGeoMap] = useState<Record<string, string>>({});
   const [versionMap, setVersionMap] = useState<Record<number, string | null>>({});
+  const [telemtMap, setTelemtMap] = useState<Record<number, string | null>>({});
   const [updateResult, setUpdateResult] = useState<UpdateReport | null>(null);
 
   const lookupNodeGeo = async (nodeList: NodeData[]) => {
@@ -97,9 +93,10 @@ export function useNodes() {
     await Promise.all(
       nodeList.map(async (node) => {
         try {
-          const { online, version } = await checkNodeHealth(node.id);
+          const { online, version, telemtVersion } = await checkNodeHealth(node.id);
           setHealthMap((prev) => ({ ...prev, [node.id]: online }));
           setVersionMap((prev) => ({ ...prev, [node.id]: version ?? null }));
+          setTelemtMap((prev) => ({ ...prev, [node.id]: telemtVersion ?? null }));
         } catch {
           setHealthMap((prev) => ({ ...prev, [node.id]: false }));
         }
@@ -175,7 +172,7 @@ export function useNodes() {
 
   return {
     nodes, loading, showAdd, setShowAdd,
-    healthMap, updatingMap, proxiesMap, geoMap, versionMap,
+    healthMap, updatingMap, proxiesMap, geoMap, versionMap, telemtMap,
     updateResult, setUpdateResult,
     loadNodes, handleDelete, handleUpdate,
   };

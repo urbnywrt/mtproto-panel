@@ -6,3 +6,5 @@
 /frontend/Dockerfile.dev
 docker-compose.override.yml
 nginx-ssl.conf
+# Журнал обновления из панели, пишет контейнер-спутник
+/update.log
