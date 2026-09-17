@@ -109,6 +109,27 @@ git fetch origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 git stash pop 2>/dev/null || true
 
+# Конфликт локальных правок с новой версией оставляет маркеры прямо в YAML, и compose
+# перестаёт читать файл. Ловим это здесь, пока панель ещё работает: ниже её остановят.
+CONFLICTS=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+if [ -n "$CONFLICTS" ]; then
+    echo ""
+    echo -e "${RED}Локальные правки конфликтуют с новой версией:${NC}"
+    echo "$CONFLICTS" | sed 's/^/  /'
+    echo ""
+    echo -e "${GREEN}Панель не остановлена и работает на прежней версии.${NC}"
+    echo -e "Правки сохранены в заначке — посмотреть: ${YELLOW}git stash show -p 'stash@{0}'${NC}"
+    echo -e "Порт и образы задаются в .env (PORT, IMAGE_REPO, IMAGE_TAG), остальное —"
+    echo -e "в docker-compose.override.yml. Чтобы взять версию из репозитория:"
+    echo ""
+    for f in $CONFLICTS; do
+        echo -e "  ${YELLOW}git checkout origin/${BRANCH} -- ${f}${NC}"
+    done
+    echo -e "  ${YELLOW}git stash drop 'stash@{0}'${NC}   # если правка больше не нужна"
+    echo -e "  ${YELLOW}sudo bash update.sh${NC}"
+    exit 1
+fi
+
 echo -e "${GREEN}  Обновления получены.${NC}"
 
 # Возвращаемся в директорию панели
