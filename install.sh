@@ -228,6 +228,10 @@ if [ "$SSL_OPTION" = "2" ] || [ "$SSL_OPTION" = "3" ]; then
 
     # Create nginx SSL config
     cat > nginx-ssl.conf << 'NGINXEOF'
+# Docker's embedded DNS — see frontend/nginx.conf for why a literal host name in
+# proxy_pass answers 502 after every update.
+resolver 127.0.0.11 valid=30s ipv6=off;
+
 server {
     listen 80;
     server_name _;
@@ -252,7 +256,8 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://backend:3000/api/;
+        set $backend_host backend;
+        proxy_pass http://$backend_host:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
